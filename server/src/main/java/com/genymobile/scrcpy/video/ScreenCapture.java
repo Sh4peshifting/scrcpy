@@ -38,6 +38,7 @@ public class ScreenCapture extends SurfaceCapture {
     private Orientation captureOrientation;
     private final float angle;
     private final boolean captureSecure;
+    private boolean secureDisplayFailed;
 
     private VideoConstraints videoConstraints;
 
@@ -134,10 +135,16 @@ public class ScreenCapture extends SurfaceCapture {
 
         if (captureSecure) {
             Surface captureSurface = surface;
-            PrivilegedCapture.call(() -> {
-                createSecureDisplay(captureSurface, inputSize);
-                return null;
-            });
+            try {
+                PrivilegedCapture.call(() -> {
+                    createSecureDisplay(captureSurface, inputSize);
+                    return null;
+                });
+            } catch (IOException e) {
+                secureDisplayFailed = true;
+                stop();
+                throw e;
+            }
         } else {
             startRegularDisplay(surface, inputSize);
         }
@@ -237,6 +244,10 @@ public class ScreenCapture extends SurfaceCapture {
 
     @Override
     protected boolean applyNewVideoConstraints(VideoConstraints videoConstraints) {
+        if (secureDisplayFailed) {
+            // A permission or identity failure cannot be fixed by downsizing.
+            return false;
+        }
         this.videoConstraints = videoConstraints;
         return true;
     }

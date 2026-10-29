@@ -38,9 +38,15 @@ for name in ("regular", "secure"):
     else:
         assert rgb[0] > 200 and rgb[1] < 50 and rgb[2] > 200, "Secure capture must show magenta"
 PY
-# Rotate and recapture to exercise display destruction and recreation.
+# Rotate during capture to exercise display destruction and recreation.
 adb shell settings put system accelerometer_rotation 0
-adb shell settings put system user_rotation 1
 timeout 45 "$client" --capture-secure --no-audio --no-control --no-playback \
-    --record=release/work/smoke/rotated.mkv --time-limit=3 --max-size=640
+    --record=release/work/smoke/rotated.mkv --time-limit=8 --max-size=640 \
+    --verbosity=debug > release/work/smoke/rotated.log 2>&1 &
+capture_pid=$!
+sleep 3
+adb shell settings put system user_rotation 1
+wait "$capture_pid"
+cat release/work/smoke/rotated.log
+ffprobe -v error -show_streams release/work/smoke/rotated.mkv
 adb logcat -d > release/work/smoke/logcat.txt
