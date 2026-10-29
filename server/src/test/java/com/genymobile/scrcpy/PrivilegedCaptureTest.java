@@ -64,4 +64,18 @@ public class PrivilegedCaptureTest {
         }
         Assert.assertEquals(Arrays.asList(0, 1000, 0, 2000), uids);
     }
+
+    @Test
+    public void testRestoreFailureIsNotIgnored() throws Exception {
+        try {
+            PrivilegedCapture.runWithUid(0, () -> "display", uid -> {
+                if (uid == 2000) {
+                    throw new IOException("restore denied");
+                }
+            });
+            Assert.fail("A failed identity restore must abort capture");
+        } catch (IOException e) {
+            Assert.assertEquals("restore denied", e.getMessage());
+        }
+    }
 }

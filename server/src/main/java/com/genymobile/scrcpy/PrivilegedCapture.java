@@ -1,8 +1,10 @@
 package com.genymobile.scrcpy;
 
+import android.annotation.SuppressLint;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
 import android.system.Os;
 
 import java.io.IOException;
@@ -26,12 +28,13 @@ public final class PrivilegedCapture {
     }
 
     @SuppressWarnings("deprecation")
+    @SuppressLint("DiscouragedPrivateApi")
     public static void init() throws Exception {
         if (Os.getuid() != 0) {
             throw new IOException("Secure capture requires root; authorize Shell in your root manager or use adb root");
         }
         // Keep shell file access and UHID input while retaining the real root UID.
-        Os.setgroups(new int[] {SHELL_UID, 3011});
+        Process.class.getDeclaredMethod("setGroups", int[].class).invoke(null, (Object) new int[] {SHELL_UID, 3011});
         Os.setgid(SHELL_UID);
         Os.seteuid(SHELL_UID);
         handler = new Handler(Looper.getMainLooper());

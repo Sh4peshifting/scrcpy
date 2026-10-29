@@ -38,6 +38,14 @@ for name in ("regular", "secure"):
     else:
         assert rgb[0] > 200 and rgb[1] < 50 and rgb[2] > 200, "Secure capture must show magenta"
 PY
+# Verify that ordinary shell audio calls still work after privileged creation.
+if (( $(adb shell getprop ro.build.version.sdk | tr -d '\r') >= 33 )); then
+    timeout 45 "$client" --capture-secure --require-audio --no-control --no-playback \
+        --record=release/work/smoke/audio.mkv --time-limit=3 --max-size=640 \
+        --verbosity=debug 2>&1 | tee release/work/smoke/audio.log
+    test "$(ffprobe -v error -select_streams a -show_entries stream=codec_type \
+        -of csv=p=0 release/work/smoke/audio.mkv)" = audio
+fi
 # Rotate during capture to exercise display destruction and recreation.
 adb shell settings put system accelerometer_rotation 0
 timeout 45 "$client" --capture-secure --no-audio --no-control --no-playback \
