@@ -22,8 +22,9 @@ wrapper nor a patched system service is required.
 Audio, clipboard and input retain their normal options. The server normally uses
 shell credentials rather than running all service calls as system. Root-manager,
 SELinux and OEM policy differences may still affect these features; use
-`--no-audio` or `--no-clipboard-autosync` if needed. Supplementary group 3011 is
-retained for UHID keyboard, mouse and gamepad input (`-K`, `-M`, `-G`).
+`--no-audio` or `--no-clipboard-autosync` if needed. UHID keyboard, mouse and
+gamepad input (`-K`, `-M`, `-G`) open `/dev/uhid` under temporary root identity,
+then use the descriptor as shell. No supplementary-group API is required.
 
 ## Implementation
 

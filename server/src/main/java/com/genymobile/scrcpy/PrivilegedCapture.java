@@ -1,10 +1,8 @@
 package com.genymobile.scrcpy;
 
-import android.annotation.SuppressLint;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.Process;
 import android.system.Os;
 
 import java.io.IOException;
@@ -28,13 +26,11 @@ public final class PrivilegedCapture {
     }
 
     @SuppressWarnings("deprecation")
-    @SuppressLint("DiscouragedPrivateApi")
     public static void init() throws Exception {
         if (Os.getuid() != 0) {
             throw new IOException("Secure capture requires root; authorize Shell in your root manager or use adb root");
         }
-        // Keep shell file access and UHID input while retaining the real root UID.
-        Process.class.getDeclaredMethod("setGroups", int[].class).invoke(null, (Object) new int[] {SHELL_UID, 3011});
+        // Keep shell file access while retaining the real root UID.
         Os.setgid(SHELL_UID);
         Os.seteuid(SHELL_UID);
         handler = new Handler(Looper.getMainLooper());
@@ -59,13 +55,25 @@ public final class PrivilegedCapture {
         }
     }
 
-    @SuppressWarnings("deprecation")
     public static <T> T call(Callable<T> action) throws IOException {
+        return callWithUid(getCaptureUid(Build.VERSION.SDK_INT), action);
+    }
+
+    public static boolean isEnabled() {
+        return handler != null;
+    }
+
+    public static <T> T callAsRoot(Callable<T> action) throws IOException {
+        return callWithUid(0, action);
+    }
+
+    @SuppressWarnings("deprecation")
+    private static <T> T callWithUid(int uid, Callable<T> action) throws IOException {
         if (handler == null) {
             throw new IOException("Secure capture has not been initialized");
         }
         // Binder observes the main thread's effective UID. Serialize identity changes there.
-        FutureTask<T> task = new FutureTask<>(() -> runWithUid(getCaptureUid(Build.VERSION.SDK_INT), action, Os::seteuid));
+        FutureTask<T> task = new FutureTask<>(() -> runWithUid(uid, action, Os::seteuid));
         if (Looper.myLooper() == handler.getLooper()) {
             task.run();
         } else if (!handler.post(task)) {
@@ -81,7 +89,7 @@ public final class PrivilegedCapture {
             task.cancel(false);
             throw new IOException("Secure capture timed out", e);
         } catch (ExecutionException e) {
-            throw new IOException("Could not create secure display", e.getCause());
+            throw new IOException("Privileged capture operation failed", e.getCause());
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.genymobile.scrcpy.control;
 
 import com.genymobile.scrcpy.AndroidVersions;
+import com.genymobile.scrcpy.PrivilegedCapture;
 import com.genymobile.scrcpy.util.Ln;
 import com.genymobile.scrcpy.util.StringUtils;
 import com.genymobile.scrcpy.wrappers.ServiceManager;
@@ -57,7 +58,13 @@ public final class UhidManager {
 
     public void open(int id, int vendorId, int productId, String name, byte[] reportDesc) throws IOException {
         try {
-            FileDescriptor fd = Os.open("/dev/uhid", OsConstants.O_RDWR, 0);
+            FileDescriptor fd;
+            if (PrivilegedCapture.isEnabled()) {
+                // Open with root DAC permissions, then use the descriptor under shell identity.
+                fd = PrivilegedCapture.callAsRoot(() -> Os.open("/dev/uhid", OsConstants.O_RDWR, 0));
+            } else {
+                fd = Os.open("/dev/uhid", OsConstants.O_RDWR, 0);
+            }
             try {
                 // First UHID device added
                 boolean firstDevice = fds.isEmpty();
