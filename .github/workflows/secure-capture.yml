@@ -1,0 +1,211 @@
+name: Secure capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a prerelease after all tests pass'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  VERSION: v5.0.1-secure.1
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: Install Android SDK components
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Test and build server
+        env:
+          GRADLE: gradle
+        run: |
+          release/test_server.sh
+          release/build_server.sh
+          bash release/tests/build_secure_display.sh
+      - name: Check Java style reports
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          errors = []
+          for report in Path('server/build/reports/checkstyle').glob('*.xml'):
+              for file in ET.parse(report).getroot():
+                  for error in file:
+                      if error.get('severity') == 'error':
+                          errors.append((file.get('name'), error.attrib))
+          assert not errors, errors
+          PY
+      - name: Upload server and test application
+        uses: actions/upload-artifact@v7
+        with:
+          name: server
+          path: |
+            release/work/build-server/server/scrcpy-server
+            release/work/secure-display/test.apk
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: server-reports
+          path: server/build/reports/
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y meson ninja-build nasm ffmpeg libavcodec-dev \
+             libavdevice-dev libavformat-dev libavutil-dev libswresample-dev \
+             libusb-1.0-0-dev libv4l-dev libasound2-dev libpulse-dev \
+             libaudio-dev libfribidi-dev libjack-dev libsndio-dev libx11-dev libxext-dev \
+             libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+             libxkbcommon-dev libdrm-dev libva-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
+             libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev libthai-dev \
+             libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev
+      - name: Build Linux client
+        run: release/build_linux.sh x86_64
+      - name: Test client
+        run: |
+          export PKG_CONFIG_LIBDIR="$PWD/app/deps/work/install/linux-native-static/lib/pkgconfig:$PWD/release/work/system-pkgconfig-linux-x86_64"
+          release/test_client.sh -Dstatic=true
+          python3 release/tests/test_root_command.py release/work/build-test/app/test_command_root
+      - name: Archive client
+        run: tar -C release/work/build-linux-x86_64 -czf linux.tar.gz dist
+      - name: Upload client
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux
+          path: linux.tar.gz
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: client-reports
+          path: release/work/build-test/meson-logs/
+
+  windows:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y meson ninja-build nasm mingw-w64 mingw-w64-tools libz-mingw-w64-dev
+      - name: Build Windows client
+        run: release/build_windows.sh 64
+      - name: Archive client
+        run: tar -C release/work/build-win64 -czf windows.tar.gz dist
+      - name: Upload client
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: windows.tar.gz
+
+  emulator:
+    needs: [server, linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [31, 33, 34, 35, 36]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Download server
+        uses: actions/download-artifact@v8
+        with:
+          name: server
+          path: release/work/
+      - name: Download Linux client
+        uses: actions/download-artifact@v8
+        with:
+          name: linux
+      - name: Prepare client and emulator
+        run: |
+          mkdir -p release/work/build-linux-x86_64
+          tar -C release/work/build-linux-x86_64 -xzf linux.tar.gz
+          sudo apt update
+          sudo apt install -y ffmpeg
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test secure pixels on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash release/tests/test_secure_capture.sh
+      - name: Upload emulator evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: emulator-api-${{ matrix.api }}
+          path: release/work/smoke/
+
+  release:
+    needs: [server, linux, windows, emulator]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Download server
+        uses: actions/download-artifact@v8
+        with:
+          name: server
+          path: release/work/
+      - name: Download Linux client
+        uses: actions/download-artifact@v8
+        with:
+          name: linux
+      - name: Download Windows client
+        uses: actions/download-artifact@v8
+        with:
+          name: windows
+      - name: Package release
+        run: |
+          mkdir -p release/work/build-linux-x86_64 release/work/build-win64
+          tar -C release/work/build-linux-x86_64 -xzf linux.tar.gz
+          tar -C release/work/build-win64 -xzf windows.tar.gz
+          release/package_client.sh linux-x86_64 tar.gz
+          release/package_client.sh win64 zip
+          release/package_server.sh
+          cd release/output
+          sha256sum scrcpy-* > SHA256SUMS.txt
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: scrcpy-${{ env.VERSION }}
+          path: release/output/
+      - name: Publish prerelease
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$VERSION" release/output/* \
+            --target "$GITHUB_SHA" --title "scrcpy ${VERSION#v}" \
+            --notes-file doc/secure-release-notes.md --prerelease --latest=false
