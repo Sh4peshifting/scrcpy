@@ -16,6 +16,12 @@ provides display and control of Android devices connected on USB (or over TCP/IP
 .SH OPTIONS
 
 .TP
+.B \-\-capture\-secure
+Capture secure windows using root access on the device (Android 12 or newer).
+
+Start the server through su, or use an already rooted adbd. Only existing displays are supported. Device restrictions may still prevent capture.
+
+.TP
 .B \-\-always\-on\-top
 Make scrcpy window always on top (above other windows).
 

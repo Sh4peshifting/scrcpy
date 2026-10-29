@@ -29,6 +29,7 @@ arguments=(
     '--camera-torch[Turn on the camera torch when the camera starts]'
     '--camera-zoom[Specify the camera zoom initial value]'
     '--capture-orientation=[Set the capture video orientation]:orientation:(0 90 180 270 flip0 flip90 flip180 flip270 @0 @90 @180 @270 @flip0 @flip90 @flip180 @flip270)'
+    '--capture-secure[Capture secure windows using root access on the device]'
     '--crop=[\[width\:height\:x\:y\] Crop the device screen on the server]'
     {-d,--select-usb}'[Use USB device]'
     '--disable-screensaver[Disable screensaver while scrcpy is running]'

@@ -22,6 +22,7 @@ _scrcpy() {
         --camera-torch
         --camera-zoom=
         --capture-orientation=
+        --capture-secure
         --crop=
         -d --select-usb
         --disable-screensaver
