@@ -2,6 +2,7 @@ package com.genymobile.scrcpy.video;
 
 import com.genymobile.scrcpy.AndroidVersions;
 import com.genymobile.scrcpy.Options;
+import com.genymobile.scrcpy.PrivilegedCapture;
 import com.genymobile.scrcpy.control.PositionMapper;
 import com.genymobile.scrcpy.device.Device;
 import com.genymobile.scrcpy.display.DisplayInfo;
@@ -36,6 +37,7 @@ public class ScreenCapture extends SurfaceCapture {
     private Orientation.Lock captureOrientationLock;
     private Orientation captureOrientation;
     private final float angle;
+    private final boolean captureSecure;
 
     private VideoConstraints videoConstraints;
 
@@ -60,6 +62,7 @@ public class ScreenCapture extends SurfaceCapture {
         assert captureOrientationLock != null;
         assert captureOrientation != null;
         this.angle = options.getAngle();
+        this.captureSecure = options.getCaptureSecure();
     }
 
     @Override
@@ -129,6 +132,53 @@ public class ScreenCapture extends SurfaceCapture {
             inputSize = videoSize;
         }
 
+        if (captureSecure) {
+            Surface captureSurface = surface;
+            PrivilegedCapture.call(() -> {
+                createSecureDisplay(captureSurface, inputSize);
+                return null;
+            });
+        } else {
+            startRegularDisplay(surface, inputSize);
+        }
+
+        if (vdListener != null) {
+            int virtualDisplayId;
+            PositionMapper positionMapper;
+            if (virtualDisplay == null || displayId == 0) {
+                // Surface control or main display: send all events to the original display, relative to the device size
+                Size deviceSize = displayInfo.getSize();
+                positionMapper = PositionMapper.create(videoSize, transform, deviceSize);
+                virtualDisplayId = displayId;
+            } else {
+                // The positions are relative to the virtual display, not the original display (so use inputSize, not deviceSize!)
+                positionMapper = PositionMapper.create(videoSize, transform, inputSize);
+                virtualDisplayId = virtualDisplay.getDisplay().getDisplayId();
+            }
+            vdListener.onNewVirtualDisplay(virtualDisplayId, positionMapper);
+        }
+    }
+
+    private void createSecureDisplay(Surface surface, Size inputSize) throws Exception {
+        if (Build.VERSION.SDK_INT < AndroidVersions.API_34_ANDROID_14) {
+            display = SurfaceControl.createDisplay("scrcpy", true);
+            if (display == null) {
+                throw new IOException("Secure display creation denied by SurfaceFlinger");
+            }
+            Size deviceSize = displayInfo.getSize();
+            setDisplaySurface(display, surface, deviceSize.toRect(), inputSize.toRect(), displayInfo.getLayerStack());
+            Ln.d("Display: using secure SurfaceControl API (system UID)");
+        } else {
+            virtualDisplay = ServiceManager.getDisplayManager()
+                    .createSecureVirtualDisplay("scrcpy", inputSize.getWidth(), inputSize.getHeight(), displayId, surface);
+            if (virtualDisplay == null) {
+                throw new IOException("Secure display creation denied by DisplayManager");
+            }
+            Ln.d("Display: using secure DisplayManager API (root UID)");
+        }
+    }
+
+    private void startRegularDisplay(Surface surface, Size inputSize) {
         try {
             virtualDisplay = ServiceManager.getDisplayManager()
                     .createVirtualDisplay("scrcpy", inputSize.getWidth(), inputSize.getHeight(), displayId, surface);
@@ -155,22 +205,6 @@ public class ScreenCapture extends SurfaceCapture {
                     throw new AssertionError("Could not create display");
                 }
             }
-        }
-
-        if (vdListener != null) {
-            int virtualDisplayId;
-            PositionMapper positionMapper;
-            if (virtualDisplay == null || displayId == 0) {
-                // Surface control or main display: send all events to the original display, relative to the device size
-                Size deviceSize = displayInfo.getSize();
-                positionMapper = PositionMapper.create(videoSize, transform, deviceSize);
-                virtualDisplayId = displayId;
-            } else {
-                // The positions are relative to the virtual display, not the original display (so use inputSize, not deviceSize!)
-                positionMapper = PositionMapper.create(videoSize, transform, inputSize);
-                virtualDisplayId = virtualDisplay.getDisplay().getDisplayId();
-            }
-            vdListener.onNewVirtualDisplay(virtualDisplayId, positionMapper);
         }
     }
 

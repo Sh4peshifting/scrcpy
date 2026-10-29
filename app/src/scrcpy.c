@@ -455,6 +455,7 @@ scrcpy(struct scrcpy_options *options) {
         .display_ime_policy = options->display_ime_policy,
         .video = options->video,
         .audio = options->audio,
+        .capture_secure = options->capture_secure,
         .audio_dup = options->audio_dup,
         .show_touches = options->show_touches,
         .stay_awake = options->stay_awake,

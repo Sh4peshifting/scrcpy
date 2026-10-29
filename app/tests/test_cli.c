@@ -149,6 +149,28 @@ static void test_parse_shortcut_mods(void) {
     assert(!ok);
 }
 
+static void test_capture_secure(void) {
+    struct scrcpy_cli_args args = {.opts = scrcpy_options_default};
+    char *argv[] = {"scrcpy", "--capture-secure", "--require-audio", "-K"};
+    assert(scrcpy_parse_args(&args, ARRAY_LEN(argv), argv));
+    assert(args.opts.capture_secure);
+    assert(args.opts.audio);
+    assert(args.opts.require_audio);
+
+    const char *conflicts[] = {
+        "--no-video", "--video-source=camera", "--new-display",
+        "--list-displays", "--no-video-playback",
+#ifdef HAVE_USB
+        "--otg",
+#endif
+    };
+    for (unsigned i = 0; i < ARRAY_LEN(conflicts); ++i) {
+        struct scrcpy_cli_args invalid = {.opts = scrcpy_options_default};
+        char *bad_argv[] = {"scrcpy", "--capture-secure", (char *) conflicts[i]};
+        assert(!scrcpy_parse_args(&invalid, ARRAY_LEN(bad_argv), bad_argv));
+    }
+}
+
 int main(int argc, char *argv[]) {
     (void) argc;
     (void) argv;
@@ -158,5 +180,6 @@ int main(int argc, char *argv[]) {
     test_options();
     test_options2();
     test_parse_shortcut_mods();
+    test_capture_secure();
     return 0;
 }

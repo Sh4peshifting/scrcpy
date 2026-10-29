@@ -11,6 +11,8 @@ import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.hardware.display.VirtualDisplay;
+import android.hardware.display.VirtualDisplayConfig;
+import android.media.projection.MediaProjection;
 import android.os.Handler;
 import android.view.Display;
 import android.view.Surface;
@@ -19,6 +21,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.concurrent.Executor;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -171,6 +174,19 @@ public final class DisplayManager {
     public VirtualDisplay createVirtualDisplay(String name, int width, int height, int displayIdToMirror, Surface surface) throws Exception {
         Method method = getCreateVirtualDisplayMethod();
         return (VirtualDisplay) method.invoke(null, name, width, height, displayIdToMirror, surface);
+    }
+
+    @TargetApi(AndroidVersions.API_34_ANDROID_14)
+    public VirtualDisplay createSecureVirtualDisplay(String name, int width, int height, int displayIdToMirror, Surface surface) throws Exception {
+        int flags = android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR
+                | android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_SECURE;
+        VirtualDisplayConfig.Builder builder = new VirtualDisplayConfig.Builder(name, width, height, 1)
+                .setFlags(flags)
+                .setSurface(surface);
+        builder.getClass().getMethod("setDisplayIdToMirror", int.class).invoke(builder, displayIdToMirror);
+        Method method = manager.getClass().getMethod("createVirtualDisplay", Context.class,
+                MediaProjection.class, VirtualDisplayConfig.class, VirtualDisplay.Callback.class, Executor.class);
+        return (VirtualDisplay) method.invoke(manager, FakeContext.get(), null, builder.build(), null, null);
     }
 
     public VirtualDisplay createNewVirtualDisplay(String name, int width, int height, int dpi, Surface surface, int flags) throws Exception {

@@ -233,11 +233,22 @@ public final class Server {
             }
         });
 
-        dropRootPrivileges();
-
         prepareMainLooper();
 
         Options options = Options.parse(args);
+
+        if (options.getCaptureSecure()) {
+            if (Build.VERSION.SDK_INT < AndroidVersions.API_31_ANDROID_12) {
+                throw new IllegalArgumentException("Secure capture requires Android 12 or newer");
+            }
+            if (!options.getVideo() || options.getVideoSource() != VideoSource.DISPLAY
+                    || options.getNewDisplay() != null || options.getList()) {
+                throw new IllegalArgumentException("Secure capture requires mirroring an existing display");
+            }
+            PrivilegedCapture.init();
+        } else {
+            dropRootPrivileges();
+        }
 
         Ln.disableSystemStreams();
         Ln.initLogLevel(options.getLogLevel());

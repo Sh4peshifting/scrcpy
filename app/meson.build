@@ -52,6 +52,7 @@ src = [
     'src/util/acksync.c',
     'src/util/audiobuf.c',
     'src/util/average.c',
+    'src/util/command.c',
     'src/util/env.c',
     'src/util/file.c',
     'src/util/intmap.c',
@@ -83,7 +84,6 @@ conf = configuration_data()
 if host_machine.system() == 'windows'
     windows = import('windows')
     src += [
-        'src/util/command.c',
         'src/sys/win/file.c',
         'src/sys/win/process.c',
         windows.compile_resources('scrcpy-windows.rc'),
@@ -299,6 +299,11 @@ if get_option('buildtype') == 'debug'
           'src/util/command.c',
           'src/util/str.c',
           'src/util/strbuf.c',
+        ]],
+        ['test_command_root', [
+            'tests/test_command_root.c',
+            'src/util/command.c',
+            'src/util/strbuf.c',
         ]],
         ['test_control_msg_serialize', [
             'tests/test_control_msg_serialize.c',

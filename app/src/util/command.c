@@ -4,6 +4,59 @@
 
 #include "util/strbuf.h"
 
+static bool
+sc_command_append_shell_arg(struct sc_strbuf *buf, const char *arg) {
+    if (!sc_strbuf_append_char(buf, '\'')) {
+        return false;
+    }
+    for (const char *p = arg; *p; ++p) {
+        bool ok = *p == '\''
+                ? sc_strbuf_append_staticstr(buf, "'\\''")
+                : sc_strbuf_append_char(buf, *p);
+        if (!ok) {
+            return false;
+        }
+    }
+    return sc_strbuf_append_char(buf, '\'');
+}
+
+char *
+sc_command_serialize_root(const char *const argv[]) {
+    struct sc_strbuf inner;
+    if (!sc_strbuf_init(&inner, 1024)) {
+        return NULL;
+    }
+    if (!sc_strbuf_append_staticstr(&inner, "exec env")) {
+        free(inner.s);
+        return NULL;
+    }
+    for (const char *const *arg = argv; *arg; ++arg) {
+        if (!sc_strbuf_append_char(&inner, ' ')
+                || !sc_command_append_shell_arg(&inner, *arg)) {
+            free(inner.s);
+            return NULL;
+        }
+    }
+
+    struct sc_strbuf outer;
+    if (!sc_strbuf_init(&outer, 2048)) {
+        free(inner.s);
+        return NULL;
+    }
+    bool ok = sc_strbuf_append_staticstr(&outer,
+                    "if [ $(id -u) = 0 ]; then ")
+           && sc_strbuf_append_str(&outer, inner.s)
+           && sc_strbuf_append_staticstr(&outer, "; else exec su -c ")
+           && sc_command_append_shell_arg(&outer, inner.s)
+           && sc_strbuf_append_staticstr(&outer, "; fi");
+    free(inner.s);
+    if (!ok) {
+        free(outer.s);
+        return NULL;
+    }
+    return outer.s;
+}
+
 char *
 sc_command_serialize_windows(const char *const argv[]) {
     // <https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments>

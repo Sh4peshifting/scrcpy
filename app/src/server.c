@@ -8,6 +8,7 @@
 #include <sys/types.h>
 
 #include "adb/adb.h"
+#include "util/command.h"
 #include "util/env.h"
 #include "util/file.h"
 #include "util/log.h"
@@ -269,6 +270,10 @@ execute_server(struct sc_server *server,
     ADD_PARAM("scid=%08x", params->scid);
     ADD_PARAM("log_level=%s", log_level_to_server_string(params->log_level));
 
+    if (params->capture_secure) {
+        ADD_PARAM("capture_secure=true");
+    }
+
     if (!params->video) {
         ADD_PARAM("video=false");
     }
@@ -476,7 +481,21 @@ execute_server(struct sc_server *server,
     // Then click on "Debug"
 #endif
     // Inherit both stdout and stderr (all server logs are printed to stdout)
-    pid = sc_adb_execute(cmd, 0);
+    if (params->capture_secure) {
+        char *command = sc_command_serialize_root(cmd + 4);
+        if (!command) {
+            LOG_OOM();
+            goto end;
+        }
+        const char *root_cmd[] = {
+            cmd[0], cmd[1], cmd[2], cmd[3], command, NULL,
+        };
+        LOGI("Secure capture: requesting root access on the device");
+        pid = sc_adb_execute(root_cmd, 0);
+        free(command);
+    } else {
+        pid = sc_adb_execute(cmd, 0);
+    }
 
 end:
     for (unsigned i = dyn_idx; i < count; ++i) {

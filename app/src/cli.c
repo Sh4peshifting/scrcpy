@@ -112,6 +112,7 @@ enum {
     OPT_IGNORE_VIDEO_ENCODER_CONSTRAINTS,
     OPT_NO_TERMINAL_TITLE,
     OPT_HWDEC,
+    OPT_CAPTURE_SECURE,
 };
 
 struct sc_option {
@@ -339,6 +340,14 @@ static const struct sc_option options[] = {
                 "If '@' is passed alone, then the rotation is locked to the "
                 "initial device orientation.\n"
                 "Default is 0.",
+    },
+    {
+        .longopt_id = OPT_CAPTURE_SECURE,
+        .longopt = "capture-secure",
+        .text = "Capture secure windows using root access on the device.\n"
+                "Start the server through su, or use an already rooted adbd.\n"
+                "Only existing displays are supported. Requires Android 12 "
+                "or newer. Device restrictions may still prevent capture.",
     },
     {
         .longopt_id = OPT_CROP,
@@ -3005,6 +3014,9 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
             case OPT_NO_TERMINAL_TITLE:
                 opts->update_terminal_title = false;
                 break;
+            case OPT_CAPTURE_SECURE:
+                opts->capture_secure = true;
+                break;
             case OPT_HWDEC:
                 if (!parse_hwdec_mode(optarg, &opts->hwdec_mode)) {
                     return false;
@@ -3047,6 +3059,13 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
     v4l2 = !!opts->v4l2_device;
 #endif
 
+    if (opts->capture_secure
+            && (otg || opts->list || opts->new_display
+                || opts->video_source != SC_VIDEO_SOURCE_DISPLAY)) {
+        LOGE("--capture-secure requires mirroring an existing display");
+        return false;
+    }
+
     if (!opts->window) {
         // Without window, there cannot be any video playback
         opts->video_playback = false;
@@ -3073,6 +3092,11 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
     if (opts->audio && !opts->audio_playback && !opts->record_filename) {
         LOGI("No audio playback, no recording: audio disabled");
         opts->audio = false;
+    }
+
+    if (opts->capture_secure && !opts->video) {
+        LOGE("--capture-secure requires video capture");
+        return false;
     }
 
     if (!opts->video && !opts->audio && !opts->control && !otg) {
