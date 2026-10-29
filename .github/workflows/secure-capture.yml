@@ -30,7 +30,7 @@ jobs:
         with:
           gradle-version: '9.3.1'
       - name: Install Android SDK components
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"'
       - name: Test and build server
         env:
           GRADLE: gradle
@@ -70,6 +70,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+      - name: Cache native dependencies
+        uses: actions/cache@v4
+        with:
+          path: app/deps/work/
+          key: linux-x86_64-deps-${{ hashFiles('app/deps/*.sh', 'app/deps/_*') }}
       - name: Install dependencies
         run: |
           sudo apt update
@@ -107,6 +112,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+      - name: Cache native dependencies
+        uses: actions/cache@v4
+        with:
+          path: app/deps/work/
+          key: win64-deps-${{ hashFiles('app/deps/*.sh', 'app/deps/_*', 'cross_win64.txt') }}
       - name: Install dependencies
         run: |
           sudo apt update
